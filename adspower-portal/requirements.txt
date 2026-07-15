@@ -6,3 +6,5 @@ passlib[bcrypt]
 python-multipart
 itsdangerous
 requests
+
+psycopg[binary]
