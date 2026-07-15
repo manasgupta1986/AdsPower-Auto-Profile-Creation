@@ -498,7 +498,8 @@ def os_type_to_system(os_type: str) -> str:
 
 @app.get("/login", response_class=HTMLResponse)
 def login_page(request: Request):
-return templates.TemplateResponse(request, "login.html", {"request": request})
+    return templates.TemplateResponse(request, "login.html", {"request": request})
+
 
 @app.post("/login")
 async def login(request: Request, db: Session = Depends(get_db)):
