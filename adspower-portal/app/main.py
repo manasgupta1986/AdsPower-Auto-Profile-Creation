@@ -367,6 +367,8 @@ def build_review(project: Project, db: Session):
     analysts = {a.id: a for a in project.analysts}
     plans = list(project.countries)
     all_proxies = list(project.proxies)
+    all_jobs = db.scalars(select(ProvisionJob).where(ProvisionJob.project_id == project.id)).all()
+
     proxies_by_country = defaultdict(list)
     untagged_proxies = []
     for p in all_proxies:
@@ -375,19 +377,45 @@ def build_review(project: Project, db: Session):
         else:
             untagged_proxies.append(p)
 
+    completed_counts = defaultdict(int)
+    queued_counts = defaultdict(int)
+    pending = running = completed = failed = 0
+    completed_durations = []
+    for job in all_jobs:
+        key = (job.analyst_name, job.country_code.upper())
+        queued_counts[key] += 1
+        if job.status == "completed":
+            completed += 1
+            completed_counts[key] += 1
+            try:
+                completed_durations.append(max((job.updated_at - job.created_at).total_seconds(), 1))
+            except Exception:
+                completed_durations.append(5)
+        elif job.status == "failed":
+            failed += 1
+        elif job.status == "running":
+            running += 1
+        else:
+            pending += 1
+
+    avg_duration = round(sum(completed_durations) / len(completed_durations), 1) if completed_durations else 8
+    eta_seconds = int((pending + running) * avg_duration) if (pending + running) else 0
+
     proxy_used_ids = set()
     profile_rows = []
-    analyst_summary = defaultdict(lambda: {
+    summary_by_row = defaultdict(lambda: {
         "analyst": "",
-        "countries": set(),
-        "total_profiles": 0,
+        "country_code": "",
+        "total_required": 0,
+        "total_created": 0,
+        "gap": 0,
         "desktop": 0,
         "mobile": 0,
         "windows": 0,
         "mac": 0,
         "android": 0,
         "iphone": 0,
-        "proxy_rows_mapped": 0,
+        "mapped_proxies": 0,
         "extension_category": project.extension_category or "",
     })
     seq_map = defaultdict(int)
@@ -405,11 +433,11 @@ def build_review(project: Project, db: Session):
         for analyst_id_str, share_count in shares.items():
             analyst = analysts[int(analyst_id_str)]
             seg = allocate_segments(share_count, project)
-            analyst_key = analyst.name
-            summary = analyst_summary[analyst_key]
+            row_key = (analyst.name, plan.country_code.upper())
+            summary = summary_by_row[row_key]
             summary["analyst"] = analyst.name
-            summary["countries"].add(plan.country_code.upper())
-            summary["total_profiles"] += share_count
+            summary["country_code"] = plan.country_code.upper()
+            summary["total_required"] += share_count
             summary["desktop"] += seg["desktop"]
             summary["mobile"] += seg["mobile"]
             summary["windows"] += seg["windows"]
@@ -431,7 +459,7 @@ def build_review(project: Project, db: Session):
                     if proxy_obj:
                         proxy_used_ids.add(proxy_obj.id)
                         proxy_index += 1
-                        summary["proxy_rows_mapped"] += 1
+                        summary["mapped_proxies"] += 1
                     profile_name = f"{normalize_name(project.code)}_{normalize_name(plan.country_code.upper())}_{normalize_name(analyst.name)}_{os_type.upper()}_{seq_map[seq_key]:03d}"
                     payload = {
                         "name": profile_name,
@@ -467,18 +495,29 @@ def build_review(project: Project, db: Session):
                     })
 
     analyst_grid = []
-    for summary in sorted(analyst_summary.values(), key=lambda x: x["analyst"]):
-        summary["countries"] = ", ".join(sorted(summary["countries"]))
+    for row_key, summary in sorted(summary_by_row.items(), key=lambda kv: (kv[0][0].lower(), kv[0][1])):
+        summary["total_created"] = completed_counts[row_key]
+        summary["gap"] = max(summary["total_required"] - summary["total_created"], 0)
+        summary["jobs_queued"] = queued_counts[row_key]
         analyst_grid.append(summary)
 
     totals = {
-        "projects_profiles": len(profile_rows),
+        "profiles_required": len(profile_rows),
+        "profiles_created": completed,
         "proxy_count": len(all_proxies),
         "mapped_proxy_count": len(proxy_used_ids),
         "unmapped_profiles": sum(1 for r in profile_rows if r["proxy"] == "UNMAPPED"),
     }
-    return {"analyst_grid": analyst_grid, "profile_rows": profile_rows, "totals": totals}
-
+    job_progress = {
+        "total": len(all_jobs),
+        "pending": pending,
+        "running": running,
+        "completed": completed,
+        "failed": failed,
+        "eta_seconds": eta_seconds,
+        "average_seconds_per_profile": avg_duration,
+    }
+    return {"analyst_grid": analyst_grid, "profile_rows": profile_rows, "totals": totals, "job_progress": job_progress}
 
 def proxy_to_string(proxy_obj: Optional[ProxyRecord]) -> str:
     if not proxy_obj:
@@ -738,16 +777,42 @@ def create_jobs(project_id: int, db: Session = Depends(get_db), user: User = Dep
 @app.get("/api/projects/{project_id}/jobs")
 def list_jobs(project_id: int, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     jobs = db.scalars(select(ProvisionJob).where(ProvisionJob.project_id == project_id).order_by(ProvisionJob.created_at.desc())).all()
-    return [{
-        "id": j.id,
-        "profile_name": j.profile_name,
-        "analyst_name": j.analyst_name,
-        "country_code": j.country_code,
-        "device_type": j.device_type,
-        "os_type": j.os_type,
-        "status": j.status,
-        "result_json": json.loads(j.result_json) if j.result_json else None,
-    } for j in jobs]
+    pending = sum(1 for j in jobs if j.status == "pending")
+    running = sum(1 for j in jobs if j.status == "running")
+    completed = sum(1 for j in jobs if j.status == "completed")
+    failed = sum(1 for j in jobs if j.status == "failed")
+    durations = []
+    for j in jobs:
+        if j.status == "completed":
+            try:
+                durations.append(max((j.updated_at - j.created_at).total_seconds(), 1))
+            except Exception:
+                durations.append(5)
+    avg_duration = round(sum(durations) / len(durations), 1) if durations else 8
+    eta_seconds = int((pending + running) * avg_duration) if (pending + running) else 0
+    return {
+        "summary": {
+            "total": len(jobs),
+            "pending": pending,
+            "running": running,
+            "completed": completed,
+            "failed": failed,
+            "eta_seconds": eta_seconds,
+            "average_seconds_per_profile": avg_duration,
+        },
+        "jobs": [{
+            "id": j.id,
+            "profile_name": j.profile_name,
+            "analyst_name": j.analyst_name,
+            "country_code": j.country_code,
+            "device_type": j.device_type,
+            "os_type": j.os_type,
+            "status": j.status,
+            "created_at": j.created_at.isoformat() if j.created_at else None,
+            "updated_at": j.updated_at.isoformat() if j.updated_at else None,
+            "result_json": json.loads(j.result_json) if j.result_json else None,
+        } for j in jobs]
+    }
 
 
 @app.get("/api/connectors")
