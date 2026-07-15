@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AdsPower Profile Provisioning Portal</title>
+  <style>
+    :root { --bg:#0b1020; --panel:#121a2b; --muted:#93a4bd; --line:#25314b; --text:#e8eef9; --primary:#3b82f6; --ok:#16a34a; --warn:#f59e0b; --bad:#ef4444; }
+    * { box-sizing:border-box; }
+    body { margin:0; font-family:Inter, Arial, sans-serif; background:var(--bg); color:var(--text); }
+    .topbar { display:flex; justify-content:space-between; align-items:center; padding:16px 24px; background:#08101d; border-bottom:1px solid var(--line); position:sticky; top:0; z-index:20; }
+    .brand { font-weight:700; font-size:18px; }
+    .userbox { display:flex; align-items:center; gap:12px; color:var(--muted); }
+    .layout { display:grid; grid-template-columns:320px 1fr; min-height:calc(100vh - 65px); }
+    .sidebar { padding:20px; border-right:1px solid var(--line); background:#0e1526; }
+    .main { padding:20px; }
+    .panel { background:var(--panel); border:1px solid var(--line); border-radius:16px; padding:16px; margin-bottom:16px; }
+    .panel h2, .panel h3 { margin:0 0 14px; }
+    .muted { color:var(--muted); }
+    input, select, textarea { width:100%; padding:10px 12px; background:#0c1424; color:var(--text); border:1px solid var(--line); border-radius:10px; }
+    textarea { min-height:92px; }
+    button { background:var(--primary); border:0; color:white; padding:10px 14px; border-radius:10px; cursor:pointer; font-weight:600; }
+    button.secondary { background:#1e293b; }
+    button.danger { background:#7f1d1d; }
+    .grid2, .grid3, .grid4 { display:grid; gap:12px; }
+    .grid2 { grid-template-columns:repeat(2, 1fr); }
+    .grid3 { grid-template-columns:repeat(3, 1fr); }
+    .grid4 { grid-template-columns:repeat(4, 1fr); }
+    .row { display:flex; gap:10px; align-items:center; }
+    .stats { display:grid; grid-template-columns:repeat(4, 1fr); gap:12px; }
+    .stat { background:#0c1424; border:1px solid var(--line); border-radius:12px; padding:14px; }
+    .stat b { display:block; font-size:22px; margin-top:6px; }
+    table { width:100%; border-collapse:collapse; font-size:14px; }
+    th, td { padding:10px 8px; border-bottom:1px solid var(--line); text-align:left; vertical-align:top; }
+    th { color:#b8c6da; background:#0c1424; position:sticky; top:0; }
+    .table-wrap { max-height:360px; overflow:auto; border:1px solid var(--line); border-radius:12px; }
+    .tag { display:inline-block; padding:4px 8px; border-radius:999px; background:#13223d; color:#b9d4ff; font-size:12px; }
+    .good { color:#86efac; }
+    .warn { color:#fcd34d; }
+    .bad { color:#fca5a5; }
+    .project-item { padding:12px; border:1px solid var(--line); border-radius:12px; margin-bottom:10px; cursor:pointer; }
+    .project-item.active { border-color:#3b82f6; background:#0c1424; }
+    .small { font-size:12px; }
+    .right { text-align:right; }
+    @media (max-width: 1100px) {
+      .layout { grid-template-columns:1fr; }
+      .sidebar { border-right:0; border-bottom:1px solid var(--line); }
+      .stats { grid-template-columns:repeat(2,1fr); }
+    }
+  </style>
+</head>
+<body>
+  <div class="topbar">
+    <div class="brand">AdsPower Profile Provisioning Portal</div>
+    <div class="userbox">
+      <span>Signed in as {{ username }}</span>
+      <form method="post" action="/logout"><button class="secondary" type="submit">Logout</button></form>
+    </div>
+  </div>
+
+  <div class="layout">
+    <aside class="sidebar">
+      <div class="panel">
+        <h3>Create project</h3>
+        <div class="grid2">
+          <div><label>Name</label><input id="newProjectName" placeholder="Alpha Growth" /></div>
+          <div><label>Code</label><input id="newProjectCode" placeholder="ALPHA" /></div>
+        </div>
+        <div class="grid2" style="margin-top:10px;">
+          <div><label>AdsPower group</label><input id="newProjectGroup" placeholder="100 or group name" /></div>
+          <div><label>Extension category</label><input id="newProjectExtension" placeholder="Universal_Default_Extensions" /></div>
+        </div>
+        <div style="margin-top:10px;"><button onclick="createProject()">Create project</button></div>
+      </div>
+
+      <div class="panel">
+        <h3>Projects</h3>
+        <div id="projectsList"></div>
+      </div>
+
+      <div class="panel">
+        <h3>Connectors</h3>
+        <div id="connectorsList" class="small muted">No connector heartbeat yet.</div>
+      </div>
+    </aside>
+
+    <main class="main">
+      <div class="panel">
+        <h2 id="projectHeader">Select a project</h2>
+        <div id="projectMeta" class="muted">Create a project on the left, then configure analysts, countries, device mix, proxies, and review.</div>
+      </div>
+
+      <div id="workspace" style="display:none;">
+        <div class="panel">
+          <h3>Project settings</h3>
+          <div class="grid4">
+            <div><label>Desktop %</label><input id="desktopPct" type="number" value="50" /></div>
+            <div><label>Mobile %</label><input id="mobilePct" type="number" value="50" /></div>
+            <div><label>Windows % of Desktop</label><input id="windowsPct" type="number" value="50" /></div>
+            <div><label>Mac % of Desktop</label><input id="macPct" type="number" value="50" /></div>
+          </div>
+          <div class="grid4" style="margin-top:10px;">
+            <div><label>Android % of Mobile</label><input id="androidPct" type="number" value="50" /></div>
+            <div><label>iPhone % of Mobile</label><input id="iphonePct" type="number" value="50" /></div>
+            <div><label>AdsPower group</label><input id="adsGroup" /></div>
+            <div><label>Target connector name</label><input id="connectorName" placeholder="optional connector name" /></div>
+          </div>
+          <div class="grid2" style="margin-top:10px;">
+            <div><label>Extension category</label><input id="extensionCategory" /></div>
+            <div><label>Remark template</label><input id="remarkTemplate" placeholder="Project | Analyst | Country | Device" /></div>
+          </div>
+          <div style="margin-top:10px;"><button onclick="saveSettings()">Save settings</button></div>
+        </div>
+
+        <div class="grid2">
+          <div class="panel">
+            <h3>Analysts</h3>
+            <label>One analyst per line</label>
+            <textarea id="analystNames" placeholder="Alice\nBob\nCarol"></textarea>
+            <div style="margin-top:10px;"><button onclick="addAnalysts()">Add analysts</button></div>
+            <div class="table-wrap" style="margin-top:12px; max-height:220px;">
+              <table>
+                <thead><tr><th>Name</th><th class="right">Action</th></tr></thead>
+                <tbody id="analystsTable"></tbody>
+              </table>
+            </div>
+          </div>
+
+          <div class="panel">
+            <h3>Country allocation</h3>
+            <div class="grid3">
+              <div><label>Country code</label><input id="countryCode" placeholder="US" /></div>
+              <div><label>Total profiles</label><input id="countryCount" type="number" placeholder="100" /></div>
+              <div><label>Assigned analysts</label><select id="countryAnalysts" multiple size="4"></select></div>
+            </div>
+            <div style="margin-top:10px;"><button onclick="addCountryPlan()">Add / update country plan</button></div>
+            <div class="table-wrap" style="margin-top:12px; max-height:220px;">
+              <table>
+                <thead><tr><th>Country</th><th>Total</th><th>Analysts</th><th class="right">Action</th></tr></thead>
+                <tbody id="countriesTable"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <h3>Proxy CSV upload</h3>
+          <div class="grid3">
+            <div><input id="proxyFile" type="file" accept=".csv" /></div>
+            <div class="row"><input id="replaceExisting" type="checkbox" style="width:auto;" /><label>Replace existing proxies</label></div>
+            <div><button onclick="uploadProxies()">Upload proxy CSV</button></div>
+          </div>
+          <div id="proxyUploadResult" class="small muted" style="margin-top:8px;"></div>
+        </div>
+
+        <div class="panel">
+          <div class="row" style="justify-content:space-between; align-items:flex-end;">
+            <div>
+              <h3>Final review grid</h3>
+              <div class="muted small">Analyst-level visual final check before job creation</div>
+            </div>
+            <div class="row">
+              <button class="secondary" onclick="loadReview()">Recalculate</button>
+              <button onclick="createJobs()">Create AdsPower jobs</button>
+            </div>
+          </div>
+          <div class="stats" style="margin:12px 0 16px;">
+            <div class="stat"><div class="muted small">Generated profiles</div><b id="statProfiles">0</b></div>
+            <div class="stat"><div class="muted small">Uploaded proxies</div><b id="statProxies">0</b></div>
+            <div class="stat"><div class="muted small">Mapped proxies</div><b id="statMapped">0</b></div>
+            <div class="stat"><div class="muted small">Unmapped profiles</div><b id="statUnmapped">0</b></div>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Analyst</th><th>Countries</th><th>Total</th><th>Desktop</th><th>Mobile</th><th>Windows</th><th>Mac</th><th>Android</th><th>iPhone</th><th>Mapped Proxies</th><th>Extension</th>
+                </tr>
+              </thead>
+              <tbody id="reviewAnalystGrid"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="panel">
+          <h3>Expanded profile preview</h3>
+          <div class="table-wrap" style="max-height:420px;">
+            <table>
+              <thead>
+                <tr>
+                  <th>Profile name</th><th>Analyst</th><th>Country</th><th>Device</th><th>OS</th><th>Proxy</th><th>Extension</th>
+                </tr>
+              </thead>
+              <tbody id="profilePreviewTable"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="panel">
+          <h3>Provisioning jobs</h3>
+          <div class="table-wrap" style="max-height:280px;">
+            <table>
+              <thead>
+                <tr><th>ID</th><th>Profile</th><th>Analyst</th><th>Country</th><th>OS</th><th>Status</th><th>Result</th></tr>
+              </thead>
+              <tbody id="jobsTable"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script>
+    let currentProjectId = null;
+    let analystsMap = {};
+
+    async function api(url, options = {}) {
+      const headers = { ...(options.headers || {}) };
+      if (!(options.body instanceof FormData) && !headers['Content-Type']) headers['Content-Type'] = 'application/json';
+      const res = await fetch(url, {
+        ...options,
+        headers,
+      });
+      if (!res.ok) {
+        let msg = 'Request failed';
+        try { const data = await res.json(); msg = data.detail || JSON.stringify(data); } catch (e) {}
+        throw new Error(msg);
+      }
+      const ct = res.headers.get('content-type') || '';
+      return ct.includes('application/json') ? res.json() : res.text();
+    }
+
+    async function loadProjects() {
+      const projects = await api('/api/projects');
+      const list = document.getElementById('projectsList');
+      list.innerHTML = projects.length ? '' : '<div class="muted small">No projects yet.</div>';
+      projects.forEach(p => {
+        const div = document.createElement('div');
+        div.className = 'project-item' + (p.id === currentProjectId ? ' active' : '');
+        div.innerHTML = `<div><b>${p.name}</b></div><div class="small muted">${p.code}</div>`;
+        div.onclick = () => selectProject(p.id);
+        list.appendChild(div);
+      });
+    }
+
+    async function loadConnectors() {
+      const connectors = await api('/api/connectors');
+      const box = document.getElementById('connectorsList');
+      if (!connectors.length) {
+        box.innerHTML = 'No connector heartbeat yet.';
+        return;
+      }
+      box.innerHTML = connectors.map(c => `<div class="project-item"><b>${c.name}</b><div class="small muted">${c.host_os || ''} • last seen ${c.last_seen}</div></div>`).join('');
+    }
+
+    async function createProject() {
+      const body = {
+        name: document.getElementById('newProjectName').value.trim(),
+        code: document.getElementById('newProjectCode').value.trim(),
+        ads_group: document.getElementById('newProjectGroup').value.trim(),
+        extension_category: document.getElementById('newProjectExtension').value.trim(),
+        naming_pattern: 'Project_Country_Analyst_Device_Sequence'
+      };
+      if (!body.name || !body.code) return alert('Project name and code are required.');
+      await api('/api/projects', { method:'POST', body: JSON.stringify(body) });
+      document.getElementById('newProjectName').value = '';
+      document.getElementById('newProjectCode').value = '';
+      await loadProjects();
+    }
+
+    async function selectProject(id) {
+      currentProjectId = id;
+      await loadProjects();
+      const data = await api(`/api/projects/${id}`);
+      const p = data.project;
+      document.getElementById('workspace').style.display = 'block';
+      document.getElementById('projectHeader').innerText = `${p.name} (${p.code})`;
+      document.getElementById('projectMeta').innerHTML = `<span class="tag">${p.naming_pattern}</span> <span class="tag">Group: ${p.ads_group || '0'}</span> <span class="tag">Extension: ${p.extension_category || '-'}</span>`;
+      ['desktopPct','mobilePct','windowsPct','macPct','androidPct','iphonePct'].forEach((idField) => {
+        const map = {
+          desktopPct:'desktop_pct', mobilePct:'mobile_pct', windowsPct:'windows_pct', macPct:'mac_pct', androidPct:'android_pct', iphonePct:'iphone_pct'
+        };
+        document.getElementById(idField).value = p[map[idField]];
+      });
+      document.getElementById('adsGroup').value = p.ads_group || '';
+      document.getElementById('extensionCategory').value = p.extension_category || '';
+      document.getElementById('connectorName').value = p.connector_name || '';
+      document.getElementById('remarkTemplate').value = p.remark_template || '';
+      await loadAnalysts();
+      await loadCountries();
+      await loadReview();
+      await loadJobs();
+    }
+
+    async function saveSettings() {
+      if (!currentProjectId) return;
+      const body = {
+        desktop_pct: Number(document.getElementById('desktopPct').value),
+        mobile_pct: Number(document.getElementById('mobilePct').value),
+        windows_pct: Number(document.getElementById('windowsPct').value),
+        mac_pct: Number(document.getElementById('macPct').value),
+        android_pct: Number(document.getElementById('androidPct').value),
+        iphone_pct: Number(document.getElementById('iphonePct').value),
+        ads_group: document.getElementById('adsGroup').value.trim(),
+        extension_category: document.getElementById('extensionCategory').value.trim(),
+        connector_name: document.getElementById('connectorName').value.trim() || null,
+        remark_template: document.getElementById('remarkTemplate').value.trim() || null,
+      };
+      await api(`/api/projects/${currentProjectId}/settings`, { method:'PATCH', body: JSON.stringify(body) });
+      await selectProject(currentProjectId);
+      alert('Settings saved.');
+    }
+
+    async function loadAnalysts() {
+      if (!currentProjectId) return;
+      const analysts = await api(`/api/projects/${currentProjectId}/analysts`);
+      analystsMap = {};
+      analysts.forEach(a => analystsMap[a.id] = a.name);
+      const tbody = document.getElementById('analystsTable');
+      tbody.innerHTML = analysts.map(a => `<tr><td>${a.name}</td><td class="right"><button class="danger" onclick="deleteAnalyst(${a.id})">Delete</button></td></tr>`).join('') || '<tr><td colspan="2" class="muted">No analysts yet.</td></tr>';
+      const sel = document.getElementById('countryAnalysts');
+      sel.innerHTML = analysts.map(a => `<option value="${a.id}">${a.name}</option>`).join('');
+    }
+
+    async function addAnalysts() {
+      if (!currentProjectId) return;
+      const fd = new FormData();
+      fd.append('names_csv', document.getElementById('analystNames').value);
+      await fetch(`/api/projects/${currentProjectId}/analysts`, { method:'POST', body: fd });
+      document.getElementById('analystNames').value = '';
+      await loadAnalysts();
+    }
+
+    async function deleteAnalyst(id) {
+      await api(`/api/analysts/${id}`, { method:'DELETE' });
+      await loadAnalysts();
+      await loadCountries();
+      await loadReview();
+    }
+
+    async function loadCountries() {
+      if (!currentProjectId) return;
+      const countries = await api(`/api/projects/${currentProjectId}/countries`);
+      const tbody = document.getElementById('countriesTable');
+      tbody.innerHTML = countries.map(c => `<tr><td>${c.country_code}</td><td>${c.total_profiles}</td><td>${c.analyst_ids.map(id => analystsMap[id] || id).join(', ')}</td><td class="right"><button class="danger" onclick="deleteCountry(${c.id})">Delete</button></td></tr>`).join('') || '<tr><td colspan="4" class="muted">No country plans yet.</td></tr>';
+    }
+
+    async function addCountryPlan() {
+      if (!currentProjectId) return;
+      const options = [...document.getElementById('countryAnalysts').selectedOptions].map(o => Number(o.value));
+      const body = {
+        country_code: document.getElementById('countryCode').value.trim().toUpperCase(),
+        total_profiles: Number(document.getElementById('countryCount').value),
+        analyst_ids: options
+      };
+      if (!body.country_code || !body.total_profiles || !body.analyst_ids.length) return alert('Country, total, and analysts are required.');
+      await api(`/api/projects/${currentProjectId}/countries`, { method:'POST', body: JSON.stringify(body) });
+      document.getElementById('countryCode').value = '';
+      document.getElementById('countryCount').value = '';
+      await loadCountries();
+      await loadReview();
+    }
+
+    async function deleteCountry(id) {
+      await api(`/api/countries/${id}`, { method:'DELETE' });
+      await loadCountries();
+      await loadReview();
+    }
+
+    async function uploadProxies() {
+      if (!currentProjectId) return;
+      const file = document.getElementById('proxyFile').files[0];
+      if (!file) return alert('Choose a CSV file first.');
+      const fd = new FormData();
+      fd.append('file', file);
+      fd.append('replace_existing', document.getElementById('replaceExisting').checked ? 'true' : 'false');
+      const res = await fetch(`/api/projects/${currentProjectId}/proxies/upload`, { method:'POST', body: fd });
+      const data = await res.json();
+      document.getElementById('proxyUploadResult').innerText = `Created ${data.created} proxies. Errors: ${data.errors.length}`;
+      await loadReview();
+    }
+
+    async function loadReview() {
+      if (!currentProjectId) return;
+      const review = await api(`/api/projects/${currentProjectId}/review`);
+      document.getElementById('statProfiles').innerText = review.totals.projects_profiles;
+      document.getElementById('statProxies').innerText = review.totals.proxy_count;
+      document.getElementById('statMapped').innerText = review.totals.mapped_proxy_count;
+      document.getElementById('statUnmapped').innerText = review.totals.unmapped_profiles;
+      const rg = document.getElementById('reviewAnalystGrid');
+      rg.innerHTML = review.analyst_grid.map(r => `<tr>
+        <td>${r.analyst}</td><td>${r.countries}</td><td>${r.total_profiles}</td><td>${r.desktop}</td><td>${r.mobile}</td><td>${r.windows}</td><td>${r.mac}</td><td>${r.android}</td><td>${r.iphone}</td><td>${r.proxy_rows_mapped}</td><td>${r.extension_category || '-'}</td>
+      </tr>`).join('') || '<tr><td colspan="11" class="muted">Nothing to review yet.</td></tr>';
+      const preview = document.getElementById('profilePreviewTable');
+      preview.innerHTML = review.profile_rows.map(r => `<tr>
+        <td>${r.profile_name}</td><td>${r.analyst}</td><td>${r.country}</td><td>${r.device_type}</td><td>${r.os_type}</td><td class="${r.proxy==='UNMAPPED' ? 'bad' : 'good'}">${r.proxy}</td><td>${r.extension_category || '-'}</td>
+      </tr>`).join('') || '<tr><td colspan="7" class="muted">No generated profiles yet.</td></tr>';
+    }
+
+    async function createJobs() {
+      if (!currentProjectId) return;
+      const res = await api(`/api/projects/${currentProjectId}/create-jobs`, { method:'POST' });
+      alert(`Created ${res.created_jobs} jobs.`);
+      await loadJobs();
+    }
+
+    async function loadJobs() {
+      if (!currentProjectId) return;
+      const jobs = await api(`/api/projects/${currentProjectId}/jobs`);
+      const tbody = document.getElementById('jobsTable');
+      tbody.innerHTML = jobs.map(j => `<tr>
+        <td>${j.id}</td><td>${j.profile_name}</td><td>${j.analyst_name}</td><td>${j.country_code}</td><td>${j.os_type}</td><td><span class="tag">${j.status}</span></td><td class="small">${j.result_json ? JSON.stringify(j.result_json) : ''}</td>
+      </tr>`).join('') || '<tr><td colspan="7" class="muted">No jobs yet.</td></tr>';
+    }
+
+    loadProjects();
+    loadConnectors();
+    setInterval(loadConnectors, 10000);
+  </script>
+</body>
+</html>
