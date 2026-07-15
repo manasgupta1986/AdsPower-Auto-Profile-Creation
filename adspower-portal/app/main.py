@@ -713,27 +713,49 @@ async def upload_proxies(project_id: int, file: UploadFile = File(...), replace_
     project = db.get(Project, project_id)
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
+    if not file or not file.filename:
+        raise HTTPException(status_code=400, detail="No file received")
     raw = await file.read()
-    decoded = raw.decode("utf-8-sig")
+    if not raw:
+        raise HTTPException(status_code=400, detail="Uploaded file is empty")
+    try:
+        decoded = raw.decode("utf-8-sig")
+    except UnicodeDecodeError:
+        raise HTTPException(status_code=400, detail="File must be UTF-8 CSV text")
     reader = csv.DictReader(io.StringIO(decoded))
+    headers = [str(h).strip() for h in (reader.fieldnames or []) if h is not None]
+    if not headers:
+        raise HTTPException(status_code=400, detail="CSV header row is missing")
     rows = list(reader)
     if not rows:
         raise HTTPException(status_code=400, detail="No CSV rows found")
-    if replace_existing:
-        for p in list(project.proxies):
-            db.delete(p)
-        db.flush()
-    created = 0
-    errors = []
-    for idx, row in enumerate(rows, start=2):
-        try:
-            parsed = parse_proxy_row(row)
-            db.add(ProxyRecord(project_id=project_id, **parsed))
-            created += 1
-        except Exception as exc:
-            errors.append({"row": idx, "error": str(exc)})
-    db.commit()
-    return {"created": created, "errors": errors}
+    required_any = [{"proxy_host", "host"}, {"proxy_port", "port"}]
+    normalized_headers = {h.lower() for h in headers}
+    missing_groups = [sorted(group)[0] for group in required_any if not (group & normalized_headers)]
+    if missing_groups:
+        raise HTTPException(status_code=400, detail=f"CSV is missing required columns: {', '.join(missing_groups)}")
+    try:
+        if replace_existing:
+            for p in list(project.proxies):
+                db.delete(p)
+            db.flush()
+        created = 0
+        errors = []
+        for idx, row in enumerate(rows, start=2):
+            try:
+                parsed = parse_proxy_row(row)
+                db.add(ProxyRecord(project_id=project_id, **parsed))
+                created += 1
+            except Exception as exc:
+                errors.append({"row": idx, "error": str(exc)})
+        db.commit()
+        return {"created": created, "errors": errors, "headers": headers, "filename": file.filename}
+    except HTTPException:
+        db.rollback()
+        raise
+    except Exception as exc:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Proxy upload failed on server: {exc}")
 
 
 @app.get("/api/projects/{project_id}/proxies")
