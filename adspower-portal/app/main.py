@@ -131,9 +131,15 @@ class ConnectorHeartbeat(Base):
 Base.metadata.create_all(bind=engine)
 
 
+STATIC_DIR = os.path.join(BASE_DIR, "static")
+TEMPLATE_DIR = os.path.join(BASE_DIR, "templates")
+
+os.makedirs(STATIC_DIR, exist_ok=True)
+
 app = FastAPI(title="AdsPower Profile Provisioning Portal")
-app.mount("/static", StaticFiles(directory=os.path.join(BASE_DIR, "static")), name="static")
-templates = Jinja2Templates(directory=os.path.join(BASE_DIR, "templates"))
+app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+templates = Jinja2Templates(directory=TEMPLATE_DIR)
+
 
 
 class ProjectCreate(BaseModel):
