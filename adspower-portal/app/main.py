@@ -507,7 +507,7 @@ async def login(request: Request, db: Session = Depends(get_db)):
     password = str(form.get("password", "")).strip()
     user = db.scalar(select(User).where(User.username == username))
     if not user or not pwd_context.verify(password, user.password_hash):
-        return templates.TemplateResponse("login.html", {"request": request, "error": "Invalid credentials"}, status_code=400)
+        return templates.TemplateResponse(request, "login.html", {"request": request, "error": "Invalid credentials"}, status_code=400)
     response = RedirectResponse(url="/", status_code=303)
     set_session(response, user.id)
     return response
@@ -522,7 +522,7 @@ def logout():
 
 @app.get("/", response_class=HTMLResponse)
 def index(request: Request, user: User = Depends(get_current_user)):
-    return templates.TemplateResponse("app.html", {"request": request, "username": user.username})
+    return templates.TemplateResponse(request, "app.html", {"request": request, "username": user.username})
 
 
 @app.get("/api/me")
