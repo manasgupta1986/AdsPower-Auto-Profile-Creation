@@ -491,8 +491,8 @@ def build_review(project: Project, db: Session):
                         "fingerprint_config": {
                             "automatic_timezone": "1",
                             "random_ua": {
-                                "ua_browser": "chrome",
-                                "ua_system_version": os_type_to_system(os_type),
+                                "ua_browser": ["chrome"],
+                                "ua_system_version": [os_type_to_system(os_type)],
                             },
                         },
                         "country": plan.country_code.upper(),
