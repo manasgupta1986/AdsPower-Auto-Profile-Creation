@@ -20,12 +20,26 @@ from itsdangerous import URLSafeSerializer, BadSignature
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DB_PATH = os.getenv("PORTAL_DB_PATH", os.path.join(os.path.dirname(BASE_DIR), "portal.db"))
+DATABASE_URL = os.getenv("DATABASE_URL", "").strip()
 SECRET_KEY = os.getenv("PORTAL_SECRET_KEY", "change-me-in-production")
 ADMIN_USERNAME = os.getenv("PORTAL_ADMIN_USERNAME", "admin")
 ADMIN_PASSWORD = os.getenv("PORTAL_ADMIN_PASSWORD", "ChangeMe123!")
 CONNECTOR_SHARED_TOKEN = os.getenv("PORTAL_CONNECTOR_SHARED_TOKEN", "change-connector-token")
 
-engine = create_engine(f"sqlite:///{DB_PATH}", connect_args={"check_same_thread": False})
+
+def normalize_database_url(database_url: str) -> str:
+    if database_url.startswith("postgres://"):
+        return "postgresql+psycopg://" + database_url[len("postgres://"):]
+    if database_url.startswith("postgresql://") and "+psycopg" not in database_url:
+        return "postgresql+psycopg://" + database_url[len("postgresql://"):]
+    return database_url
+
+
+SQLALCHEMY_DATABASE_URL = normalize_database_url(DATABASE_URL) if DATABASE_URL else f"sqlite:///{DB_PATH}"
+engine_kwargs = {"pool_pre_ping": True}
+if SQLALCHEMY_DATABASE_URL.startswith("sqlite"):
+    engine_kwargs["connect_args"] = {"check_same_thread": False}
+engine = create_engine(SQLALCHEMY_DATABASE_URL, **engine_kwargs)
 SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
 pwd_context = CryptContext(schemes=["pbkdf2_sha256"], deprecated="auto")
 serializer = URLSafeSerializer(SECRET_KEY, salt="adspower-portal-session")
