@@ -1,0 +1,4 @@
+provider,country_code,proxy_host,proxy_port,proxy_username,proxy_password
+Decodo,US,1.1.1.1,8000,user1,pass1
+Decodo,US,1.1.1.2,8000,user2,pass2
+IPBurger,IN,2.2.2.2,9000,user3,pass3
