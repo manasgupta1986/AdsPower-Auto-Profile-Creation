@@ -131,14 +131,43 @@ class ConnectorHeartbeat(Base):
 Base.metadata.create_all(bind=engine)
 
 
-STATIC_DIR = os.path.join(BASE_DIR, "static")
-TEMPLATE_DIR = os.path.join(BASE_DIR, "templates")
+def first_existing_dir(paths, required_file=None):
+    for p in paths:
+        if required_file:
+            if os.path.isfile(os.path.join(p, required_file)):
+                return p
+        elif os.path.isdir(p):
+            return p
+    return None
 
-os.makedirs(STATIC_DIR, exist_ok=True)
+
+STATIC_DIR = first_existing_dir([
+    os.path.join(BASE_DIR, "static"),
+    os.path.join(os.getcwd(), "app", "static"),
+    os.path.join(os.getcwd(), "static"),
+    os.path.join(os.getcwd(), "adspower-portal", "app", "static"),
+])
+
+TEMPLATE_DIR = first_existing_dir([
+    os.path.join(BASE_DIR, "templates"),
+    os.path.join(os.getcwd(), "app", "templates"),
+    os.path.join(os.getcwd(), "templates"),
+    os.path.join(os.getcwd(), "adspower-portal", "app", "templates"),
+], required_file="login.html")
+
+if not STATIC_DIR:
+    STATIC_DIR = os.path.join(BASE_DIR, "static")
+    os.makedirs(STATIC_DIR, exist_ok=True)
+
+if not TEMPLATE_DIR:
+    raise RuntimeError(
+        f"Could not find templates folder. BASE_DIR={BASE_DIR}, CWD={os.getcwd()}"
+    )
 
 app = FastAPI(title="AdsPower Profile Provisioning Portal")
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 templates = Jinja2Templates(directory=TEMPLATE_DIR)
+
 
 
 
