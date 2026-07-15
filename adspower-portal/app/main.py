@@ -475,17 +475,19 @@ def build_review(project: Project, db: Session):
                         proxy_index += 1
                         summary["mapped_proxies"] += 1
                     profile_name = f"{normalize_name(project.code)}_{normalize_name(plan.country_code.upper())}_{normalize_name(analyst.name)}_{os_type.upper()}_{seq_map[seq_key]:03d}"
+                    user_proxy_config = {
+                        "proxy_soft": "other",
+                        "proxy_type": "http",
+                        "proxy_host": proxy_obj.proxy_host,
+                        "proxy_port": proxy_obj.proxy_port,
+                        "proxy_user": proxy_obj.proxy_username or "",
+                        "proxy_password": proxy_obj.proxy_password or "",
+                    } if proxy_obj else {"proxy_soft": "no_proxy"}
                     payload = {
                         "name": profile_name,
                         "group_id": project.ads_group or "0",
                         "remark": project.remark_template or f"{project.name} | {analyst.name} | {plan.country_code.upper()} | {os_type}",
-                        "user_proxy_config": {
-                            "proxy_type": "http",
-                            "proxy_host": proxy_obj.proxy_host if proxy_obj else "",
-                            "proxy_port": proxy_obj.proxy_port if proxy_obj else "",
-                            "proxy_user": (proxy_obj.proxy_username if proxy_obj else "") or "",
-                            "proxy_password": (proxy_obj.proxy_password if proxy_obj else "") or "",
-                        },
+                        "user_proxy_config": user_proxy_config,
                         "fingerprint_config": {
                             "automatic_timezone": "1",
                             "random_ua": {
