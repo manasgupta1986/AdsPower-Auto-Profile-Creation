@@ -107,14 +107,6 @@ class Analyst(Base):
     email: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     project: Mapped[Project] = relationship(back_populates="analysts")
 
-class Analyst(Base):
-    __tablename__ = "analysts"
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    project_id: Mapped[int] = mapped_column(ForeignKey("projects.id"))
-    name: Mapped[str] = mapped_column(String(255))
-    email: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
-    project: Mapped[Project] = relationship(back_populates="analysts")
-
 
 class CountryPlan(Base):
     __tablename__ = "country_plans"
